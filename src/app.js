@@ -12,6 +12,7 @@ app.use(express.json());
 
 
 //routes
+app.use(require('./routes/projectRoutes'));
 
 
 module.exports = app
