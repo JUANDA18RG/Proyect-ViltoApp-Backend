@@ -12,6 +12,13 @@ const ProjectSchema = new Schema({
     required: true
   },
   users: [{ name: String, email: String }],
+  columns: [{
+    name: String,
+    tasks: [{
+      name: String,
+      description: String
+    }]
+  }],
 });
 
 module.exports = mongoose.model('Project', ProjectSchema);
