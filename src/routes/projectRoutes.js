@@ -8,6 +8,7 @@ const TraerColumnas = require('../controllers/TraerColumns');
 const EliminarColumna = require('../controllers/EliminarColumna');
 const createTask = require('../controllers/CrearTarea');
 const TraerTareas = require('../controllers/TraerTareas');
+const MoverTarea = require('../controllers/MoverTarea');
 
 
 const router = express.Router();
@@ -23,6 +24,7 @@ router.get('/columns/:projectId', TraerColumnas.getColumnsByProject);
 router.delete('/columns/:id', EliminarColumna.deleteColumn);
 router.post('/tasks', createTask.createTask);
 router.get('/tasks', TraerTareas.getTasks);
+router.put('/mover/:taskId', MoverTarea.moveTask);
 
 
 
