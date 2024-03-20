@@ -1,4 +1,3 @@
-// controllers/columnController.js
 const Column = require('../models/Columns');
 const Project = require('../models/project');
 
@@ -22,6 +21,10 @@ exports.createColumn = async (req, res) => {
     });
 
     await column.save();
+
+    // Emitir un evento de Socket.IO a la sala correspondiente
+    const io = req.app.get('io');
+    io.to(projectId).emit('column created', column);
 
     res.status(201).json({
       success: true,

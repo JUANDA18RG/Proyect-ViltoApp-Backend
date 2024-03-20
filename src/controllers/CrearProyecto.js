@@ -11,6 +11,10 @@ exports.addProject = async (req, res) => {
 
     const project = await newProject.save();
 
+    // Emitir un evento de Socket.IO a la sala correspondiente
+    const io = req.app.get('io');
+    io.to(project._id.toString()).emit('project created', project);
+
     res.status(201).json(project);
   } catch (error) {
     res.status(400).json({ message: error.message });

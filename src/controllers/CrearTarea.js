@@ -12,6 +12,10 @@ const createTask = async (req, res) => {
     column.tasks.push(newTask._id);
     await column.save();
 
+    // Emitir un evento de Socket.IO a la sala correspondiente
+    const io = req.app.get('io');
+    io.to(columnId).emit('task created', newTask);
+
     res.status(201).json(newTask);
   } catch (error) {
     res.status(500).send('Hubo un error al crear la tarea');
