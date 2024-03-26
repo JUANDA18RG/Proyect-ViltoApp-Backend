@@ -1,34 +1,18 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
 const app = require('./app');
 const http = require('http');
-const { Server } = require('socket.io');
+const { Server: WebsocketServer } = require('socket.io');
+const {connectDB} = require('./database');
 
-async function main() {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('Conexión a MongoDB exitosa');
-    const port = app.get('port');
+connectDB();
 
-    const server = http.createServer(app);
-    const io = new Server(server);
+const server = http.createServer(app);
+const httpServer = server.listen(3000);
 
-    app.set('io', io);
-
-    io.on('connection', (socket) => {
-      console.log('Un usuario se ha conectado');
-
-      socket.on('disconnect', () => {
-        console.log('Un usuario se ha desconectado');
-      });
-    });
-
-    server.listen(port, () => {
-      console.log(`Servidor corriendo en http://localhost:${port}`);
-    });
-  } catch (err) {
-    console.error('Error conectando a MongoDB:', err);
+const io = new WebsocketServer(httpServer, {
+  cors: {
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST" , "PUT" , "DELETE"]
   }
-}
+});
 
-main();
+require('./Sockets')(io);

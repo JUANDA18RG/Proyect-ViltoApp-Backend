@@ -19,6 +19,10 @@ const ProjectSchema = new Schema({
       description: String
     }]
   }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 module.exports = mongoose.model('Project', ProjectSchema);

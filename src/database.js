@@ -1,14 +1,15 @@
-const mongoose = require('mongoose');
-console.log(process.env.MONGODB_URI);
-const URI = process.env.MONGODB_URI ? process.env.MONGODB_URI : 'mongodb://localhost/viltoapp';
+const {connect} = require('mongoose');
+const {MONGO_URI} = require('./config');
 
+ const  connectDB = async () => {
+    try {
+        await connect(MONGO_URI);
+        console.log('Conexión a MongoDB exitosa');
+    } catch (err) {
+        console.error('Error conectando a MongoDB:', err);
+    }
+};
 
-mongoose.connect('mongodb://localhost/viltoapp')
-  .then(() => console.log('Conexión a MongoDB exitosa'))
-  .catch((err) => console.error('Error conectando a MongoDB:', err));
-const connection = mongoose.connection;
+module.exports = {connectDB};
+ 
 
-connection.once('open', () => {
-    console.log('DB is connected');
-}
-);
