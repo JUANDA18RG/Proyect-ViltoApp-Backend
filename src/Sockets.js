@@ -351,28 +351,6 @@ const obtenerAcciones = async (data, socket) => {
 };
 
 
-const CrearUsuario = async (data, socket, io, callback) => {
-  try {
-    const { name, email, uid } = data;
-    const newUser = new User({ name, email, uid });
-    await newUser.save();
-    if (typeof callback === 'function') {
-      callback({
-        success: true,
-        data: newUser
-      });
-    }
-  } catch (error) {
-    console.error(error);
-    socket.emit('error', error.message);
-    if (typeof callback === 'function') {
-      callback({
-        success: false,
-        error: error.message
-      });
-    }
-  }
-};
 
 const obtenerUsuario = async (data, socket) => {
   const { email } = data;
@@ -413,6 +391,63 @@ const buscarUsuarios = async (socket) => {
   }
 };
 
+const AgregarUsuario = async (data, socket, io, callback) => {
+  try {
+    const { projectId, userEmail } = data;
+    const project = await Project.findById(projectId);
+    if (!project) {
+      socket.emit('error', 'Proyecto no encontrado');
+      return;
+    }
+    const user
+      = await User.findOne({ email:
+        userEmail });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+    project.users.push(user);
+    await project.save();
+    io.emit('usuarioAgregado', { projectId, user });
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        data: user
+      });
+    }
+  }
+  catch (error) {
+    console.error(error);
+    socket.emit('error', error.message);
+    if (typeof callback === 'function') {
+      callback({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+}
+
+const CrearUsuario = async (user) => {
+  try {
+    // Buscar si el usuario ya existe
+    const existingUser = await User.findOne({ email: user.email });
+
+    // Si el usuario no existe, crear uno nuevo
+    if (!existingUser) {
+      const newUser = new User({
+        name: user.name,
+        email: user.email,
+        uid: user.uid,
+      });
+
+      await newUser.save();
+    }
+  } catch (error) {
+    console.error("Error al crear usuario:", error.message);
+  }
+};
+
 
 module.exports = function(io) {
   io.on('connection', (socket) => {
@@ -428,13 +463,14 @@ module.exports = function(io) {
     socket.on('toggleFavorito', (projectId) => toggleFavorito(projectId, socket));
     socket.on('obtenerEstadoFavorito', (projectId) => obtenerEstadoFavorito(projectId, socket));
     socket.on('obtenerAcciones', (data) => obtenerAcciones(data, socket));
-    socket.on('CrearUsuario', (data, callback) => CrearUsuario(data, socket, io, callback));
     socket.on('obtenerUsuario', (data) => obtenerUsuario(data, socket));
     socket.on('obtenerEstadoPremium', (email) => obtenerEstadoPremium(email, socket));
     buscarUsuarios(socket);
     socket.on('error', (errorMessage) => {
       console.error('Error from server:', errorMessage);
     });
+    socket.on('agregarUsuario', (data, callback) => AgregarUsuario(data, socket, io, callback));
+    socket.on('crearUsuario', (data, callback) => CrearUsuario(data, callback));
   }
   )
 };
