@@ -12,27 +12,47 @@ const obtenerProyectos = async (emailUsuario, socket) => {
     socket.emit('error', error.message);
   }
 };
-
 const crearProyecto = async (data, socket, io) => {
   try {
-    const { name, description, users } = data;
+    const { name, description, users, userEmail } = data;
 
-    const newProject = new Project({
-      name,
-      description,
-      users: users || [],
-     
-    });
+    // Buscar al usuario en la base de datos
+    const user = await User.findOne({ email: userEmail });
+    if (user) {
+      if (!user.premium) {
+        const userProjectsCount = await Project.countDocuments({ 'users.email': userEmail });
 
-    const project = await newProject.save();
+        if (userProjectsCount >= 6) {
+          // Emitir un evento de error al cliente
+          socket.emit('error', 'Has alcanzado el límite de proyectos para usuarios no premium.');
+          return;
+        }
+      }
 
-    // Emitir un evento de Socket.IO a todos los usuarios
-    io.emit('proyectoCreado', project);
+      const newProject = new Project({
+        name,
+        description,
+        users: users || [],
+      });
 
+      const project = await newProject.save();
 
-    const fechaCreacion = project.createdAt;
-    console.log('Fecha de creación del proyecto:', fechaCreacion);
+      // Emitir un evento de Socket.IO a todos los usuarios
+      io.emit('proyectoCreado', project);
 
+      const fechaCreacion = project.createdAt;
+      console.log('Fecha de creación del proyecto:', fechaCreacion);
+
+      const nuevaAccion = {
+        accion: `Creó el proyecto ${name}`,
+        fecha: new Date(),
+      };
+      user.acciones.push(nuevaAccion);
+      await user.save();
+    } else {
+      // Emitir un evento de error al cliente
+      socket.emit('error', 'Usuario no encontrado');
+    }
 
   } catch (error) {
     // Emitir un evento de error al cliente
@@ -55,7 +75,7 @@ const eliminarProyecto = async (id, socket, io) => {
 
 const obtenerProyecto = async (id, socket) => {
   try {
-    const project = await Project.findById(id);
+    const project = await Project.findById(id).populate('users');
     socket.emit('proyecto', project);
   } catch (error) {
     socket.emit('error', error.message);
@@ -82,10 +102,9 @@ const obtenerColumnas = async (projectId, socket, callback) => {
     }
   }
 };
-
 const crearColumna = async (data, socket, io, callback) => {
   try {
-    const { name, projectId } = data;
+    const { name, projectId, userEmail } = data;
 
     const newColumn = new Column({
       name,
@@ -96,6 +115,18 @@ const crearColumna = async (data, socket, io, callback) => {
 
     // Emitir un evento de Socket.IO a todos los usuarios
     io.emit('columnaCreada', column);
+
+    // Buscar al usuario en la base de datos y guardar la acción
+    const user = await User.findOne({ email: userEmail });
+    if (user) {
+      // Agregar la acción a la lista de acciones del usuario con el nombre del proyecto
+      const nuevaAccion = {
+        accion: `Creó la columna ${name} en el proyecto ${projectId}`,
+        fecha: new Date(),
+      };
+      user.acciones.push(nuevaAccion);
+      await user.save();
+    }
 
     // Enviar respuesta de éxito al cliente
     if (typeof callback === 'function') {
@@ -118,12 +149,24 @@ const crearColumna = async (data, socket, io, callback) => {
   }
 };
 
-const eliminarColumna = async (id, socket, io, callback) => {
+const eliminarColumna = async (data, socket, io, callback) => {
   try {
+    const { id, userEmail } = data;
     await Column.findByIdAndDelete(id);
 
     // Emitir un evento de Socket.IO a todos los usuarios
     io.emit('columnaEliminada', id);
+
+    // Buscar al usuario en la base de datos y guardar la acción
+    const user = await User.findOne({ email: userEmail });
+    if (user) {
+      const nuevaAccion = {
+        accion: `Eliminó la columna con ID ${id}`,
+        fecha: new Date(),
+      };
+      user.acciones.push(nuevaAccion);
+      await user.save();
+    }
 
     // Enviar respuesta de éxito al cliente
     if (typeof callback === 'function') {
@@ -147,41 +190,6 @@ const eliminarColumna = async (id, socket, io, callback) => {
 };
 
 
-const crearTarea = async (data, socket, io, callback) => {
-  try {
-    const { name, columnId } = data;
-    const newTask = new Task({ name, columnId });
-    await newTask.save();
-
-    // Obtener la columna a la que se añadió la tarea
-    const column = await Column.findById(columnId);
-
-    // Actualizar la lista de tareas en la columna
-    column.tasks.push(newTask);
-    await column.save();
-
-    // Emitir el evento 'tareaCreada' a todos los clientes
-    io.emit('tareaCreada', { task: newTask, column });
-
-    if (typeof callback === 'function') {
-      callback({
-        success: true,
-        data: newTask
-      });
-    }
-  } catch (error) {
-    console.error(error);
-    socket.emit('error', error.message);
-    if (typeof callback === 'function') {
-      callback({
-        success: false,
-        error: error.message
-      });
-    }
-  }
-};
-
-
 const moverTarea = async (data, socket, io) => {
   const {
     taskId,
@@ -189,6 +197,7 @@ const moverTarea = async (data, socket, io) => {
     destinationColumnId,
     sourceIndex,
     destinationIndex,
+    userEmail,
   } = data;
 
   try {
@@ -211,11 +220,23 @@ const moverTarea = async (data, socket, io) => {
 
     // Emitir un evento 'tareaMovida' a todos los clientes
     io.emit('tareaMovida', { sourceColumn, destinationColumn });
+
+    // Buscar al usuario en la base de datos y guardar la acción
+    const user = await User.findOne({ email: userEmail });
+    if (user) {
+     const nuevaAccion = {
+        accion: `Movió la tarea ${movedTask.name} de la columna ${sourceColumn.name} a la columna ${destinationColumn.name}`,
+        fecha: new Date(),
+      };
+      user.acciones.push(nuevaAccion);
+      await user.save();
+    }
   } catch (error) {
     console.error('Error al mover la tarea:', error);
     socket.emit('error', 'Error al mover la tarea');
   }
 };
+
 const toggleFavorito = async (data, socket) => {
   const { projectId, userEmail } = data;
   try {
@@ -261,6 +282,137 @@ const obtenerEstadoFavorito = async (data, socket) => {
   }
 };
 
+const crearTarea = async (data, socket, io, callback) => {
+  try {
+    const { name, columnId, userEmail } = data;
+    const newTask = new Task({ name, columnId });
+    await newTask.save();
+
+    // Obtener la columna a la que se añadió la tarea
+    const column = await Column.findById(columnId);
+
+    // Actualizar la lista de tareas en la columna
+    column.tasks.push(newTask);
+    await column.save();
+
+    // Emitir el evento 'tareaCreada' a todos los clientes
+    io.emit('tareaCreada', { task: newTask, column });
+
+   
+const user = await User.findOne({ email: userEmail });
+console.log('userEmail:', userEmail); // Imprime el correo electrónico del usuario
+console.log('user:', user); // Imprime el usuario encontrado en la base de datos
+if (user) {
+  const nuevaAccion = {
+    accion: `Creó la tarea ${name}`,
+    fecha: new Date(),
+  };
+  user.acciones.push(nuevaAccion);
+  await user.save();
+  console.log('acciones después de guardar:', user.acciones); // Imprime las acciones del usuario después de guardar
+}
+
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        data: newTask
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    socket.emit('error', error.message);
+    if (typeof callback === 'function') {
+      callback({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+};
+
+
+const obtenerAcciones = async (data, socket) => {
+  const { userEmail } = data;
+  try {
+    const user = await User.findOne({ email: userEmail });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+    socket.emit('acciones', user.acciones);
+    socket.emit('conteoFechas', user.acciones.reduce((acc, action) => {
+      const fecha = new Date(action.fecha).toLocaleDateString();
+      acc[fecha] = acc[fecha] ? acc[fecha] + 1 : 1;
+      return acc;
+    }, {}));
+  } catch (error) {
+    socket.emit('error', error.message);
+  }
+};
+
+
+const CrearUsuario = async (data, socket, io, callback) => {
+  try {
+    const { name, email, uid } = data;
+    const newUser = new User({ name, email, uid });
+    await newUser.save();
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        data: newUser
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    socket.emit('error', error.message);
+    if (typeof callback === 'function') {
+      callback({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+};
+
+const obtenerUsuario = async (data, socket) => {
+  const { email } = data;
+  try {
+    const user = await User.findOne({
+      email
+    });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+    socket.emit('usuario', user);
+  } catch (error) {
+    socket.emit('error', error.message);
+  }
+}
+
+const obtenerEstadoPremium = async (email, socket) => {
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+    socket.emit('estadoPremium', user.premium);
+  } catch (error) {
+    socket.emit('error', error.message);
+  }
+};
+
+const buscarUsuarios = async (socket) => {
+  try {
+    const results = await User.find({}, 'email name'); // Añade 'name' aquí
+    socket.emit('searchResults', results);
+  } catch (error) {
+    console.log('Error buscando usuarios:', error);
+    socket.emit('error', error.message);
+  }
+};
+
 
 module.exports = function(io) {
   io.on('connection', (socket) => {
@@ -275,6 +427,14 @@ module.exports = function(io) {
     socket.on('moverTarea', (data) => moverTarea(data, socket, io));
     socket.on('toggleFavorito', (projectId) => toggleFavorito(projectId, socket));
     socket.on('obtenerEstadoFavorito', (projectId) => obtenerEstadoFavorito(projectId, socket));
+    socket.on('obtenerAcciones', (data) => obtenerAcciones(data, socket));
+    socket.on('CrearUsuario', (data, callback) => CrearUsuario(data, socket, io, callback));
+    socket.on('obtenerUsuario', (data) => obtenerUsuario(data, socket));
+    socket.on('obtenerEstadoPremium', (email) => obtenerEstadoPremium(email, socket));
+    buscarUsuarios(socket);
+    socket.on('error', (errorMessage) => {
+      console.error('Error from server:', errorMessage);
+    });
   }
   )
 };
