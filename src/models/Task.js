@@ -11,7 +11,11 @@ const TaskSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Column',
     required: true
-  }
+  },
+  assignedUsers: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 });
 
 module.exports = mongoose.model('Task', TaskSchema);

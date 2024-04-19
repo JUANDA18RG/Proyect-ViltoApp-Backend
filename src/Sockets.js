@@ -4,6 +4,7 @@ const Task = require('./models/Task');
 const User = require('./models/User');
 
 
+
 const obtenerProyectos = async (emailUsuario, socket) => {
   try {
     const proyectos = await Project.find({ 'users.email': emailUsuario });
@@ -449,6 +450,149 @@ const CrearUsuario = async (user) => {
 };
 
 
+const borrarTarea = async (data, socket, io, callback) => {
+  try {
+    const { taskId } = data;
+    const task = await Task.findById(taskId);
+    if (!task) {
+      throw new Error('Tarea no encontrada');
+    }
+
+    // Obtener la columna a la que pertenece la tarea
+    const column = await Column.findById(task.columnId);
+
+    if (column) {
+      // Actualizar la lista de tareas en la columna
+      column.tasks = column.tasks.filter(task => task._id !== taskId);
+      await column.save();
+    } else {
+      throw new Error('Columna no encontrada');
+    }
+
+    // Borrar la tarea
+    await Task.findByIdAndDelete(taskId);
+
+    // Emitir el evento 'tareaBorrada' a todos los clientes
+    io.emit('tareaBorrada', { taskId, column });
+
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        data: taskId
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    socket.emit('error', error.message);
+    if (typeof callback === 'function') {
+      callback({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+};
+
+const asignarUsuarioATarea = async (data, socket, io, callback) => {
+  try {
+    const { taskId, userEmail } = data;
+    const task = await Task.findById(taskId);
+    if (!task) {
+      throw new Error('Tarea no encontrada');
+    }
+
+    // Buscar el usuario por correo electrónico
+    const user = await User.findOne({ email: userEmail });
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    // Añadir el usuario a la lista de usuarios asignados
+    if (!task.assignedUsers.includes(user._id)) {
+      task.assignedUsers.push(user._id);
+      await task.save();
+    }
+
+    // Emitir el evento 'usuarioAsignadoATarea' a todos los clientes
+    io.emit('usuarioAsignadoATarea', { taskId, userId: user._id });
+
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        data: taskId
+      });
+      console.log('Usuario asignado a la tarea:', user);
+    }
+  } catch (error) {
+    console.error(error);
+    socket.emit('error', error.message);
+    if (typeof callback === 'function') {
+      callback({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+};
+
+const enviarMensaje = async (data, socket, io) => {
+  const { projectId, message, sender } = data;
+
+  try {
+    // Buscar el proyecto
+    const project = await Project.findById(projectId);
+    if (!project) {
+      throw new Error('Proyecto no encontrado');
+    }
+
+    // Añadir el mensaje al chat del proyecto
+    project.chat.push({ sender, message });
+    await project.save();
+
+    // Emitir el evento 'mensajeEnviado' a todos los clientes
+    io.emit('mensajeEnviado', { projectId, message: { sender, message } });
+  } catch (error) {
+    console.error('Error al enviar mensaje:', error);
+    socket.emit('error', 'Error al enviar mensaje');
+  }
+};
+
+
+const obtenerMensajes = async (projectId, socket) => {
+  try {
+    // Buscar el proyecto
+    const project = await Project.findById(projectId);
+    if (!project) {
+      throw new Error('Proyecto no encontrado');
+    }
+
+    // Enviar los mensajes al cliente
+    socket.emit('mensajesObtenidos', project.chat);
+  } catch (error) {
+    console.error('Error al obtener mensajes:', error);
+    socket.emit('error', 'Error al obtener mensajes');
+  }
+};
+
+
+const PagoParaPremium = async (data, socket, io) => {
+  const { email } = data;
+  try {
+    const user = await User
+      .findOne
+      ({ email });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+    user.premium = true;
+    await user.save();
+    socket.emit('pagoExitoso', user );
+  } catch (error) {
+    socket.emit('error', error.message);
+  }
+};
+
 module.exports = function(io) {
   io.on('connection', (socket) => {
     socket.on('obtenerProyectos', (emailUsuario) => obtenerProyectos(emailUsuario, socket));
@@ -471,6 +615,11 @@ module.exports = function(io) {
     });
     socket.on('agregarUsuario', (data, callback) => AgregarUsuario(data, socket, io, callback));
     socket.on('crearUsuario', (data, callback) => CrearUsuario(data, callback));
+    socket.on('borrarTarea', (data, callback) => borrarTarea(data, socket, io, callback));
+    socket.on('asignarUsuarioATarea', (data, callback) => asignarUsuarioATarea(data, socket, io, callback));
+    socket.on('enviarMensaje', (data) => enviarMensaje(data, socket, io));
+    socket.on('obtenerMensajes', (projectId) => obtenerMensajes(projectId, socket));
+    socket.on('pagoParaPremium', (data) => PagoParaPremium(data, socket, io));
   }
   )
 };
