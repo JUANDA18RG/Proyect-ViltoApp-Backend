@@ -30,6 +30,9 @@ const ProjectSchema = new Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  LinkProyecto:{
+    type: String
   }
 });
 
