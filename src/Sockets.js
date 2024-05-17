@@ -2,7 +2,7 @@ const Project = require('./models/project');
 const Column = require('./models/Columns');
 const Task = require('./models/Task');
 const User = require('./models/User');
-
+const nodemailer = require('nodemailer');
 
 
 const obtenerProyectos = async (emailUsuario, socket) => {
@@ -13,6 +13,7 @@ const obtenerProyectos = async (emailUsuario, socket) => {
     socket.emit('error', error.message);
   }
 };
+
 const crearProyecto = async (data, socket, io) => {
   try {
     const { name, description, users, userEmail } = data;
@@ -103,6 +104,9 @@ const obtenerColumnas = async (projectId, socket, callback) => {
     }
   }
 };
+
+
+
 const crearColumna = async (data, socket, io, callback) => {
   try {
     const { name, projectId, userEmail } = data;
@@ -129,6 +133,32 @@ const crearColumna = async (data, socket, io, callback) => {
       await user.save();
     }
 
+    // Crear un transportador de correo con la configuración de tu proveedor de correo
+    let transporter = nodemailer.createTransport({
+      service: 'gmail', // reemplaza con tu proveedor de correo
+      host: 'smtp.gmail.com', // reemplaza con el host de tu proveedor de correo
+      port: 465, // reemplaza con el puerto de tu proveedor de correo
+      secure: true, // reemplaza con true si tu proveedor de correo usa SSL
+      auth: {
+        user: 'ramirezgrismaldo@gmail.com', // reemplaza con tu correo
+        pass: 'hxljwkonzwlsexsb' // reemplaza con tu contraseña
+      }
+    });
+
+    // Buscar el proyecto y obtener la lista de usuarios
+    const project = await Project.findById(projectId);
+
+    // Enviar un correo a cada usuario del proyecto
+    project.users.forEach(async user => {
+      let info = await transporter.sendMail({
+        from: '"ViltoApp " <ramirezgrismaldo@gmail.com>', // reemplaza con tu correo y el nombre de tu aplicación
+        to: user.email, // correo del usuario
+        subject: `Movimiento en el Proyecto ${project.name} `, 
+        text: `Hola querido usuario ${userEmail} te informamos que se ha creado la columna ${name} en el proyecto ${project.name}.`, // cuerpo del correo
+      });
+      console.log('Mensaje enviado: %s', info.messageId);
+    });
+
     // Enviar respuesta de éxito al cliente
     if (typeof callback === 'function') {
       callback({
@@ -152,7 +182,7 @@ const crearColumna = async (data, socket, io, callback) => {
 
 const eliminarColumna = async (data, socket, io, callback) => {
   try {
-    const { id, userEmail } = data;
+    const { id, userEmail ,projectId } = data;
     await Column.findByIdAndDelete(id);
 
     // Emitir un evento de Socket.IO a todos los usuarios
@@ -168,6 +198,31 @@ const eliminarColumna = async (data, socket, io, callback) => {
       user.acciones.push(nuevaAccion);
       await user.save();
     }
+
+    let transporter = nodemailer.createTransport({
+      service: 'gmail', // reemplaza con tu proveedor de correo
+      host: 'smtp.gmail.com', // reemplaza con el host de tu proveedor de correo
+      port: 465, // reemplaza con el puerto de tu proveedor de correo
+      secure: true, // reemplaza con true si tu proveedor de correo usa SSL
+      auth: {
+        user: 'ramirezgrismaldo@gmail.com', // reemplaza con tu correo
+        pass: 'hxljwkonzwlsexsb' // reemplaza con tu contraseña
+      }
+    });
+
+    // Buscar el proyecto y obtener la lista de usuarios
+    const project = await Project.findById(projectId);
+
+    // Enviar un correo a cada usuario del proyecto
+    project.users.forEach(async user => {
+      let info = await transporter.sendMail({
+        from: '"ViltoApp " <ramirezgrismaldo@gmail.com>', // reemplaza con tu correo y el nombre de tu aplicación
+        to: user.email, // correo del usuario
+        subject: `Movimiento en el Proyecto ${project.name} `, 
+        text: `Hola  querido usuario ${userEmail} te informamos que se ha eliminado una columna en el proyecto ${project.name}.`, // cuerpo del correo
+      });
+      console.log('Mensaje enviado: %s', info.messageId);
+    });
 
     // Enviar respuesta de éxito al cliente
     if (typeof callback === 'function') {
@@ -199,6 +254,7 @@ const moverTarea = async (data, socket, io) => {
     sourceIndex,
     destinationIndex,
     userEmail,
+    projectId
   } = data;
 
   try {
@@ -221,6 +277,32 @@ const moverTarea = async (data, socket, io) => {
 
     // Emitir un evento 'tareaMovida' a todos los clientes
     io.emit('tareaMovida', { sourceColumn, destinationColumn });
+
+    let transporter = nodemailer.createTransport({
+      service: 'gmail', // reemplaza con tu proveedor de correo
+      host: 'smtp.gmail.com', // reemplaza con el host de tu proveedor de correo
+      port: 465, // reemplaza con el puerto de tu proveedor de correo
+      secure: true, // reemplaza con true si tu proveedor de correo usa SSL
+      auth: {
+        user: 'ramirezgrismaldo@gmail.com', // reemplaza con tu correo
+        pass: 'hxljwkonzwlsexsb' // reemplaza con tu contraseña
+      }
+    });
+
+    // Buscar el proyecto y obtener la lista de usuarios
+    const project = await Project.findById(projectId);
+
+    // Enviar un correo a cada usuario del proyecto
+    project.users.forEach(async user => {
+      let info = await transporter.sendMail({
+        from: '"ViltoApp " <ramirezgrismaldo@gmail.com>', // reemplaza con tu correo y el nombre de tu aplicación
+        to: user.email, // correo del usuario
+        subject: `Movimiento en el Proyecto ${project.name} `, 
+        text: `Hola querido usuario ${userEmail} han hecho cambios en el proyecto de mover una tarea de columna.`, 
+
+      });
+      console.log('Mensaje enviado: %s', info.messageId);
+    });
 
     // Buscar al usuario en la base de datos y guardar la acción
     const user = await User.findOne({ email: userEmail });
@@ -285,7 +367,7 @@ const obtenerEstadoFavorito = async (data, socket) => {
 
 const crearTarea = async (data, socket, io, callback) => {
   try {
-    const { name, columnId, userEmail } = data;
+    const { name, columnId, userEmail ,projectId } = data;
     const newTask = new Task({ name, columnId });
     await newTask.save();
 
@@ -298,6 +380,32 @@ const crearTarea = async (data, socket, io, callback) => {
 
     // Emitir el evento 'tareaCreada' a todos los clientes
     io.emit('tareaCreada', { task: newTask, column });
+    
+    let transporter = nodemailer.createTransport({
+      service: 'gmail', // reemplaza con tu proveedor de correo
+      host: 'smtp.gmail.com', // reemplaza con el host de tu proveedor de correo
+      port: 465, // reemplaza con el puerto de tu proveedor de correo
+      secure: true, // reemplaza con true si tu proveedor de correo usa SSL
+      auth: {
+        user: 'ramirezgrismaldo@gmail.com', // reemplaza con tu correo
+        pass: 'hxljwkonzwlsexsb' // reemplaza con tu contraseña
+      }
+    });
+
+    // Buscar el proyecto y obtener la lista de usuarios
+    const project = await Project.findById(projectId);
+
+    // Enviar un correo a cada usuario del proyecto
+    project.users.forEach(async user => {
+      let info = await transporter.sendMail({
+        from: '"ViltoApp " <ramirezgrismaldo@gmail.com>', // reemplaza con tu correo y el nombre de tu aplicación
+        to: user.email, // correo del usuario
+        subject: `Movimiento en el Proyecto ${project.name} `, 
+        text: `Hola querido usuario ${userEmail} se acaba de crear una tarea en el proyecto ${project.name}.`, 
+        
+      });
+      console.log('Mensaje enviado: %s', info.messageId);
+    });
 
    
 const user = await User.findOne({ email: userEmail });
@@ -381,10 +489,9 @@ const obtenerEstadoPremium = async (email, socket) => {
     socket.emit('error', error.message);
   }
 };
-
 const buscarUsuarios = async (socket) => {
   try {
-    const results = await User.find({}, 'email name'); // Añade 'name' aquí
+    const results = await User.find({}, 'email name').maxTimeMS(50000);
     socket.emit('searchResults', results);
   } catch (error) {
     console.log('Error buscando usuarios:', error);
@@ -450,91 +557,6 @@ const CrearUsuario = async (user) => {
 };
 
 
-const borrarTarea = async (data, socket, io, callback) => {
-  try {
-    const { taskId } = data;
-    const task = await Task.findById(taskId);
-    if (!task) {
-      throw new Error('Tarea no encontrada');
-    }
-
-    // Obtener la columna a la que pertenece la tarea
-    const column = await Column.findById(task.columnId);
-
-    if (column) {
-      // Actualizar la lista de tareas en la columna
-      column.tasks = column.tasks.filter(task => task._id !== taskId);
-      await column.save();
-    } else {
-      throw new Error('Columna no encontrada');
-    }
-
-    // Borrar la tarea
-    await Task.findByIdAndDelete(taskId);
-
-    // Emitir el evento 'tareaBorrada' a todos los clientes
-    io.emit('tareaBorrada', { taskId, column });
-
-    if (typeof callback === 'function') {
-      callback({
-        success: true,
-        data: taskId
-      });
-    }
-  } catch (error) {
-    console.error(error);
-    socket.emit('error', error.message);
-    if (typeof callback === 'function') {
-      callback({
-        success: false,
-        error: error.message
-      });
-    }
-  }
-};
-
-const asignarUsuarioATarea = async (data, socket, io, callback) => {
-  try {
-    const { taskId, userEmail } = data;
-    const task = await Task.findById(taskId);
-    if (!task) {
-      throw new Error('Tarea no encontrada');
-    }
-
-    // Buscar el usuario por correo electrónico
-    const user = await User.findOne({ email: userEmail });
-    if (!user) {
-      throw new Error('Usuario no encontrado');
-    }
-
-    // Añadir el usuario a la lista de usuarios asignados
-    if (!task.assignedUsers.includes(user._id)) {
-      task.assignedUsers.push(user._id);
-      await task.save();
-    }
-
-    // Emitir el evento 'usuarioAsignadoATarea' a todos los clientes
-    io.emit('usuarioAsignadoATarea', { taskId, userId: user._id });
-
-    if (typeof callback === 'function') {
-      callback({
-        success: true,
-        data: taskId
-      });
-      console.log('Usuario asignado a la tarea:', user);
-    }
-  } catch (error) {
-    console.error(error);
-    socket.emit('error', error.message);
-    if (typeof callback === 'function') {
-      callback({
-        success: false,
-        error: error.message
-      });
-    }
-  }
-};
-
 const enviarMensaje = async (data, socket, io) => {
   const { projectId, message, sender } = data;
 
@@ -593,6 +615,8 @@ const PagoParaPremium = async (data, socket, io) => {
   }
 };
 
+
+
 module.exports = function(io) {
   io.on('connection', (socket) => {
     socket.on('obtenerProyectos', (emailUsuario) => obtenerProyectos(emailUsuario, socket));
@@ -607,15 +631,15 @@ module.exports = function(io) {
     socket.on('toggleFavorito', (projectId) => toggleFavorito(projectId, socket));
     socket.on('obtenerEstadoFavorito', (projectId) => obtenerEstadoFavorito(projectId, socket));
     socket.on('obtenerAcciones', (data) => obtenerAcciones(data, socket));
-    socket.on('obtenerUsuario', (data) => obtenerUsuario(data, socket));
-    socket.on('obtenerEstadoPremium', (email) => obtenerEstadoPremium(email, socket));
     buscarUsuarios(socket);
     socket.on('error', (errorMessage) => {
       console.error('Error from server:', errorMessage);
     });
+    socket.on('obtenerEstadoPremium', (email) => obtenerEstadoPremium(email, socket));
+    socket.on('buscarUsuarios', () => buscarUsuarios(socket));
     socket.on('agregarUsuario', (data, callback) => AgregarUsuario(data, socket, io, callback));
     socket.on('crearUsuario', (data, callback) => CrearUsuario(data, callback));
-    socket.on('borrarTarea', (data, callback) => borrarTarea(data, socket, io, callback));
+   
     socket.on('asignarUsuarioATarea', (data, callback) => asignarUsuarioATarea(data, socket, io, callback));
     socket.on('enviarMensaje', (data) => enviarMensaje(data, socket, io));
     socket.on('obtenerMensajes', (projectId) => obtenerMensajes(projectId, socket));
@@ -623,3 +647,21 @@ module.exports = function(io) {
   }
   )
 };
+
+module.exports.obtenerProyectos = obtenerProyectos;
+module.exports.crearProyecto = crearProyecto;
+module.exports.eliminarProyecto = eliminarProyecto;
+module.exports.obtenerProyecto = obtenerProyecto;
+module.exports.obtenerColumnas = obtenerColumnas;
+module.exports.crearColumna = crearColumna;
+module.exports.eliminarColumna = eliminarColumna;
+module.exports.crearTarea = crearTarea;
+module.exports.moverTarea = moverTarea;
+module.exports.toggleFavorito = toggleFavorito;
+module.exports.obtenerEstadoFavorito = obtenerEstadoFavorito;
+module.exports.obtenerAcciones = obtenerAcciones;
+module.exports.obtenerEstadoPremium = obtenerEstadoPremium;
+module.exports.buscarUsuarios = buscarUsuarios;
+module.exports.AgregarUsuario = AgregarUsuario;
+module.exports.CrearUsuario = CrearUsuario;
+
