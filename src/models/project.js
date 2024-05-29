@@ -31,9 +31,11 @@ const ProjectSchema = new Schema({
     type: Date,
     default: Date.now
   },
-  LinkProyecto:{
-    type: String
-  }
+
+  Links: [{
+    url: String,
+    description: String
+  }],
 });
 
 module.exports = mongoose.model('Project', ProjectSchema);
