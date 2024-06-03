@@ -20,7 +20,7 @@ const httpServer = server.listen(3000, () => {
 });
 
 // Configurar servidor WebSocket con opciones CORS
-const origin =  'https://proyect-viltoapp.onrender.com';
+const origin =  process.env.VITE_FRONTEND_URL;
 
 const io = new WebsocketServer(httpServer, {
   cors: {
