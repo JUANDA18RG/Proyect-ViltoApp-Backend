@@ -1,7 +1,9 @@
 const express = require('express');
-const path = require('path');
-
 
 const app = express();
-app.use(express.static(path.join(__dirname, '../../viltoapp')))
-module.exports = app
+
+// Aquí puedes definir tus rutas de API
+// Por ejemplo:
+// app.use('/api/users', usersRouter);
+
+module.exports = app;
