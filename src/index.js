@@ -4,12 +4,15 @@ const cors = require('cors');
 const { Server: WebsocketServer } = require('socket.io');
 const { connectDB } = require('./database');
 const IA = require('./IA');
+const generarProyectoConIA = require('./IAProyects');
 
 // Conectar a la base de datos
 connectDB();
 
 // Configurar CORS
 app.use(cors());
+require('dotenv').config();
+
 
 // Crear servidor HTTP
 const server = http.createServer(app);

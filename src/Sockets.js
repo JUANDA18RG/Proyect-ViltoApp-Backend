@@ -4,6 +4,7 @@ const Task = require('./models/Task');
 const User = require('./models/User');
 const nodemailer = require('nodemailer');
 const IA = require('./IA');
+const generarProyectoConIA = require('./IAProyects');
 
 
 const obtenerProyectos = async (emailUsuario, socket) => {
@@ -859,6 +860,88 @@ const obtenerUsuarios = async (socket) => {
 };
 
 
+const crearProyectoConIA = async (data, socket, io) => {
+  try {
+    const { description, userEmail } = data;
+    if (!description || typeof description !== 'string' || description.trim().length === 0) {
+      socket.emit('error', 'La descripción del proyecto no puede estar vacía y debe ser una cadena de texto válida.');
+      return;
+    }
+
+    const user = await User.findOne({ email: userEmail });
+    if (!user) {
+      socket.emit('error', 'Usuario no encontrado');
+      return;
+    }
+
+    if (!user.premium) {
+      const userProjectsCount = await Project.countDocuments({ 'users.email': userEmail });
+      if (userProjectsCount >= 6) {
+        socket.emit('error', 'Has alcanzado el límite de proyectos para usuarios no premium.');
+        return;
+      }
+    }
+
+    // Generar título, descripción corta y columnas del proyecto con IA
+    const projectDetails = await generarProyectoConIA(description);
+
+    // Crear el nuevo proyecto con el título y la descripción corta
+    const newProject = new Project({
+      name: projectDetails.titulo,
+      description: projectDetails.descripcion,
+      users: [user],
+    });
+
+    const project = await newProject.save();
+
+    // Crear y guardar columnas
+    const columnas = projectDetails.columnas.map(columna => ({
+      name: columna,
+      projectId: project._id,
+    }));
+
+    await Column.insertMany(columnas);
+
+    // Emitir evento de Socket.IO para notificar la creación del proyecto
+    io.emit('proyectoCreadoConIA', JSON.stringify(project));
+
+    // Registrar la acción del usuario
+    const nuevaAccion = {
+      accion: `Creó el proyecto "${projectDetails.titulo}"`,
+      fecha: new Date(),
+    };
+    user.acciones.push(nuevaAccion);
+    await user.save();
+
+    // Enviar notificación por correo electrónico a los usuarios del proyecto
+    let transporter = nodemailer.createTransport({
+      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'viltoapp@gmail.com', 
+        pass: 'aixbacnyzcdwcdzq' 
+      }
+    });
+
+    for (const email of project.users.map(u => u.email)) {
+      let info = await transporter.sendMail({
+        from: '"ViltoApp" <viltoapp@gmail.com>',
+        to: email,
+        subject: `Nuevo proyecto creado: ${projectDetails.titulo}`,
+        text: `Hola, se ha creado un nuevo proyecto titulado "${projectDetails.titulo}" con Inteligencia artificial.`,
+      });
+      console.log('Mensaje enviado: %s', info.messageId);
+    }
+
+  } catch (error) {
+    console.error('Error al crear el proyecto:', error);
+    socket.emit('error', 'Hubo un problema al crear el proyecto. Inténtalo de nuevo más tarde.');
+  }
+};
+
+
 // Configuración del servidor de Socket.IO
 module.exports = function(io) {
   io.on('connection', (socket) => {
@@ -893,10 +976,6 @@ module.exports = function(io) {
     socket.on('crearUsuario', (data, callback) => CrearUsuario(data, callback));
     socket.on('obtenerUsuarios', () => obtenerUsuarios(socket));
     buscarUsuarios(socket);
-    socket.on('error', (errorMessage) => {
-      console.error('Error from server:', errorMessage);
-    });
-    
 
     // Manejo de eventos relacionados con pagos y estado premium
     socket.on('pagoParaPremium', (data) => PagoParaPremium(data, socket, io));
@@ -911,6 +990,7 @@ module.exports = function(io) {
 
     // Manejo de eventos relacionados con la IA
     socket.on('obtenerRespuestaIA', (data) => obtenerRespuestaIA(data, socket));
+    socket.on('crearProyectoConIA', (data) => crearProyectoConIA(data, socket, io));
 
     //Hacer Links
     socket.on('ingresarLink', (data, callback) => ingresarLink(data, socket, io, callback));
