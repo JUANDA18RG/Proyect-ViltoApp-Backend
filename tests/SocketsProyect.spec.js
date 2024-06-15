@@ -1,17 +1,35 @@
 const sinon = require('sinon');
-const { obtenerProyectos, crearProyecto, obtenerColumnas, crearColumna , moverTarea, CrearUsuario  } = require('../src/Sockets');
+const { obtenerProyectos, crearProyecto, obtenerColumnas, crearColumna, moverTarea, obtenerAcciones } = require('../src/Sockets');
 const Project = require('../src/models/project');
 const User = require('../src/models/User');
 const Column = require('../src/models/Columns');
 const Task = require('../src/models/Task');
+const nodemailer = require('nodemailer');
 
+// Mock de OpenAI
+jest.mock('openai', () => {
+  return jest.fn().mockImplementation(() => {
+    return {
+      createCompletion: jest.fn().mockResolvedValue({ choices: [{ text: 'mocked response' }] })
+    };
+  });
+});
+
+// Mock de nodemailer
+jest.mock('nodemailer', () => {
+  return {
+    createTransport: jest.fn().mockReturnValue({
+      sendMail: jest.fn().mockResolvedValue({ messageId: 'mockMessageId' })
+    })
+  };
+});
 
 describe('Sockets', () => {
   afterEach(() => {
     sinon.restore();
   });
 
-  // Tests de los proyectos
+  // Tests de obtenerProyectos
   describe('obtenerProyectos', () => {
     it('debería emitir los proyectos del usuario', async () => {
       const mockSocket = { emit: sinon.spy() };
@@ -24,6 +42,7 @@ describe('Sockets', () => {
     });
   });
 
+  // Tests de crearProyecto
   describe('crearProyecto', () => {
     it('debería emitir un error si el usuario no es premium y ya tiene 6 proyectos', async () => {
       const mockSocket = { emit: sinon.spy() };
@@ -37,6 +56,7 @@ describe('Sockets', () => {
     });
   });
 
+  // Tests de obtenerColumnas
   describe('obtenerColumnas', () => {
     it('debería emitir las columnas del proyecto', async () => {
       const mockSocket = { emit: sinon.spy() };
@@ -47,9 +67,9 @@ describe('Sockets', () => {
 
       sinon.assert.calledWith(mockSocket.emit, 'columnas', mockColumns);
     });
-  }, 10000);
+  });
 
-  // Tests de las columnas
+  // Tests de crearColumna
   describe('crearColumna', () => {
     it('debería emitir la columna creada', async () => {
       const mockData = {
@@ -57,20 +77,47 @@ describe('Sockets', () => {
         projectId: '65fb70753ecfaaddfd44a9489',
         userEmail: 'test@gmail.com'
       };
-      const mockUser = { email: 'test@gmail.com' };
+      const mockUser = { email: 'test@gmail.com', acciones: [], save: sinon.stub().resolvesThis() };
       sinon.stub(User, 'findOne').resolves(mockUser);
-      const mockColumn = { save: sinon.stub().resolvesThis() };
+      const mockColumn = { _id: 'mockColumnId', name: 'Columna de prueba', save: sinon.stub().resolvesThis() };
       sinon.stub(Column.prototype, 'save').resolves(mockColumn);
+      const mockProject = { _id: mockData.projectId, name: 'Proyecto de prueba', users: [{ email: 'user1@example.com' }, { email: 'user2@example.com' }] };
+      sinon.stub(Project, 'findById').resolves(mockProject);
       const mockSocket = { emit: sinon.spy() };
       const mockIo = { emit: sinon.spy() };
+
+      // Mock nodemailer transport
+      const mockTransport = nodemailer.createTransport();
+      sinon.stub(mockTransport, 'sendMail').resolves({ messageId: 'mockMessageId' });
 
       await crearColumna(mockData, mockSocket, mockIo);
 
       sinon.assert.calledWith(mockIo.emit, 'columnaCreada', mockColumn);
+      mockProject.users.forEach(user => {
+        sinon.assert.calledWith(mockTransport.sendMail, sinon.match({ to: user.email }));
+      });
+    });
+
+    it('debería manejar errores y emitir un evento de error', async () => {
+      const mockData = {
+        name: 'Columna_de_prueba',
+        projectId : "65fb70753ecfaaddfd44a9489",
+        userEmail: 'test@gmail.com'
+      };
+      const mockSocket = { emit: sinon.spy() };
+      const mockIo = { emit: sinon.spy() };
+
+      // Forzar un error en el guardado de la columna
+      sinon.stub(Column.prototype, 'save').rejects(new Error('Save error'));
+
+
+      await crearColumna(mockData, mockSocket, mockIo);
+
+      sinon.assert.calledWith(mockSocket.emit, 'error', 'Save error');
     });
   });
 
-  // Tests de las tareas
+  // Tests de moverTarea
   describe('moverTarea', () => {
     it('debería mover la tarea y emitir un evento', async () => {
       const mockData = {
@@ -107,6 +154,16 @@ describe('Sockets', () => {
     });
   });
 
+  // Tests de obtenerAcciones
+  describe('obtenerAcciones', () => {
+    it('debería emitir las acciones del usuario', async () => {
+      const mockSocket = { emit: sinon.spy() };
+      const mockUser = { email: 'test@example.com', acciones: [{ accion: 'Acción de prueba', fecha: new Date() }] };
+      sinon.stub(User, 'findOne').resolves(mockUser);
 
+      await obtenerAcciones('test@example.com', mockSocket);
+
+      sinon.assert.calledWith(mockSocket.emit, 'acciones', mockUser.acciones);
+    });
+  });
 });
-
