@@ -941,6 +941,53 @@ const crearProyectoConIA = async (data, socket, io) => {
   }
 };
 
+const cambiarEstadoTarea = async (data, socket) => {
+  try {
+    const { taskId, newStatus } = data;
+
+    if (!['pendiente', 'en progreso', 'finalizada'].includes(newStatus)) {
+      socket.emit('error', 'Estado no válido');
+      return;
+    }
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      socket.emit('error', 'Tarea no encontrada');
+      return;
+    }
+
+    task.estadoTarea = newStatus;
+    await task.save();
+
+    socket.emit('estadoTareaActualizado', task);
+  } catch (error) {
+    console.error('Error al cambiar el estado de la tarea:', error);
+    socket.emit('error', 'Hubo un problema al cambiar el estado de la tarea. Inténtalo de nuevo más tarde.');
+  }
+};
+
+
+const buscarProyectos = async ({ query, email }, socket) => {
+  try {
+    console.log("Buscando proyectos para el email:", email, "con query:", query); // Debugging
+    const proyectos = await Project.find({
+      name: { $regex: query, $options: 'i' },
+      'users.email': email // Filtrar por el email del usuario en el campo users.email
+    });
+
+    // Verifica que cada proyecto tenga un id
+    const proyectosConId = proyectos.map(proyecto => ({
+      ...proyecto._doc, // Desestructurar _doc para obtener los datos del documento
+      id: proyecto._id.toString()
+    }));
+
+    console.log("Proyectos encontrados:", proyectosConId); // Debugging
+    socket.emit('proyectosEncontrados', proyectosConId);
+  } catch (error) {
+    console.error('Error al buscar proyectos:', error);
+    socket.emit('error', 'Hubo un problema al buscar los proyectos. Inténtalo de nuevo más tarde.');
+  }
+};
 
 // Configuración del servidor de Socket.IO
 module.exports = function(io) {
@@ -956,6 +1003,8 @@ module.exports = function(io) {
     socket.on('eliminarProyecto', (id) => eliminarProyecto(id, socket, io));
     socket.on('obtenerProyecto', (id) => obtenerProyecto(id, socket));
     socket.on('editarProyecto', (data) => EditarProyecto(data, socket, io));
+    socket.on('buscarProyectos', (data) => buscarProyectos(data, socket));
+  
     
     // Manejo de eventos relacionados con columnas y tareas
     socket.on('obtenerColumnas', (projectId, callback) => obtenerColumnas(projectId, socket, callback));
@@ -964,7 +1013,7 @@ module.exports = function(io) {
     socket.on('crearTarea', (data, callback) => crearTarea(data, socket, io, callback));
     socket.on('moverTarea', (data) => moverTarea(data, socket, io));
     socket.on('eliminarTarea', (data, callback) => eliminarTarea(data, socket, io, callback));
-    socket.on('asignarUsuarioATarea', (data, callback) => asignarUsuarioATarea(data, socket, io, callback));
+    socket.on('cambiarEstadoTarea', (data) => cambiarEstadoTarea(data, socket));
 
     // Manejo de eventos relacionados con favoritos
     socket.on('toggleFavorito', (projectId) => toggleFavorito(projectId, socket));

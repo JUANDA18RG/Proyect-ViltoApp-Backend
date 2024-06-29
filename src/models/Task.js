@@ -12,10 +12,11 @@ const TaskSchema = new Schema({
     ref: 'Column',
     required: true
   },
-  assignedUsers: [{
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  }]
+  estadoTarea: {
+    type: String,
+    enum: ['pendiente', 'en progreso', 'finalizada'],
+    default: 'pendiente'
+  },
 });
 
 module.exports = mongoose.model('Task', TaskSchema);
