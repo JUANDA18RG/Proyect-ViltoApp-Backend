@@ -989,6 +989,63 @@ const buscarProyectos = async ({ query, email }, socket) => {
   }
 };
 
+const EditarNombreColumna = async (data, socket, io, callback) => {
+  try {
+    const { id, name, userEmail, projectId } = data;
+
+    // Validación básica (podría ser más exhaustiva)
+    if (!id || !name || !userEmail || !projectId) {
+      socket.emit('errorValidacion', 'Faltan datos para editar la columna');
+      return;
+    }
+
+    console.log("Buscando columna:", id, projectId);
+    const column = await Column.findOne({ _id: id, projectId: projectId });
+    if (!column) {
+      socket.emit('errorColumnaNoEncontrada', 'Columna no encontrada en el proyecto especificado');
+      return;
+    }
+
+    console.log("Columna encontrada:", column);
+
+    // Aquí podrías añadir una verificación de permisos antes de permitir la edición
+
+    column.name = name;
+    await column.save();
+
+    console.log("Columna actualizada:", column);
+
+    // Emitir el evento para todos los sockets en la sala del proyecto
+    io.to(projectId).emit('columnaEditada', { column, projectId });
+
+    // Registrar la acción del usuario
+    const user = await User.findOne({ email: userEmail });
+    if (user) {
+      const nuevaAccion = {
+        accion: `Editó la columna ${name} en el proyecto ${projectId}`,
+        fecha: new Date(),
+      };
+      user.acciones.push(nuevaAccion);
+      await user.save();
+      console.log("Acción del usuario guardada:", user);
+    }
+
+    // Llamar al callback si está definido
+    if (callback) {
+      callback({ success: true });
+    }
+  } catch (error) {
+    console.error(error);
+    socket.emit('errorEdicion', error.message);
+    if (callback) {
+      callback({ success: false, error: error.message });
+    }
+  }
+};
+
+
+
+
 // Configuración del servidor de Socket.IO
 module.exports = function(io) {
   io.on('connection', (socket) => {
@@ -1014,6 +1071,7 @@ module.exports = function(io) {
     socket.on('moverTarea', (data) => moverTarea(data, socket, io));
     socket.on('eliminarTarea', (data, callback) => eliminarTarea(data, socket, io, callback));
     socket.on('cambiarEstadoTarea', (data) => cambiarEstadoTarea(data, socket));
+    socket.on('editarNombreColumna', (data, callback) => EditarNombreColumna(data, socket, io, callback));
 
     // Manejo de eventos relacionados con favoritos
     socket.on('toggleFavorito', (projectId) => toggleFavorito(projectId, socket));
